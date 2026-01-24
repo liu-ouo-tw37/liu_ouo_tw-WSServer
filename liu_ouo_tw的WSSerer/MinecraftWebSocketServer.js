@@ -1,0 +1,916 @@
+const websocket = require("nodejs-websocket");
+const EventEmitter = require("events");
+const { estimateFinalPayloadBytes, generateId } = require("./utils");
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+
+const WSS_MAXIMUM_BYTES = 661;
+
+class MinecraftWebSocketServer extends EventEmitter {
+  constructor(port, aiWakeWord, playerRegex, minecraftAI, cooldown = 5, openweatherApiKey, geocodingApiKey, musicDir, commandsDir, mathDbPath) {
+    super(); // 初始化 EventEmitter
+    this.port = port || "5218";
+    this.aiWakeWord = aiWakeWord || "-ai?";
+    this.weatherWakeWord = "-weather?";
+    this.artWakeWord = "-art?";
+    this.musicWakeWord = "-music?";
+    this.nextWakeWord = "-next";
+    this.stopWakeWord = "-stop";
+    this.playlistWakeWord = "-playlist?";
+    this.examWakeWord = "-exam?";
+    this.answerWakeWord = "-answer?";
+    this.helpWakeWord = "-help"
+    this.playerRegex = playerRegex;
+    this.minecraftAI = minecraftAI;
+    this.cooldown = cooldown; // 新增：冷卻時間（秒）
+    this.playerCooldowns = new Map(); // 新增：追蹤玩家的冷卻時間 K: playerName, V: timestamp
+    this.exams = new Map();
+
+    this.openweatherApiKey = openweatherApiKey;
+    this.geocodingApiKey = geocodingApiKey;
+
+    this.musicFolder = musicDir;
+    this.artFolder = commandsDir;
+    this.mathDbPath = mathDbPath;
+
+    this.wsServer = null;
+    this.clientConn = null;
+
+    this.musicQueue = [];
+    this.isPlayingMusic = false;
+    this.isDatapackPlaying = false;
+    this.currentSongName = "";
+    this.currentSongTick = 0;
+    this.totalSongTicks = 0
+    this.musicList = {
+      "草東": ["大風吹", "但", "爛泥", "床", "勇敢的人"],
+      "日文歌": ["Lemon", "打上花火", "怪物", "群青", "極樂淨土", "向夜晚奔去", "boku no sensou", "Idol", "千本櫻", "Iris out",
+                "The Rumbling"],
+      "韓文歌": ["what is love", "spaghetti", "Eve Psyche & the Bluebeard's Wife"],
+      "巴西funk": ["Montagem miau", "Montagem Rugada", "passo bem solto", "Mente ma", "刀馬背景樂", "No Batidao"]
+    };
+
+    this.commandBatches = new Map(); // K: batchId, V: { commandCount, results, resolve, reject, timeout }
+    this.requestIdToBatchId = new Map(); // K: requestId, V: batchId
+    this.requestTimeoutMs = 60_000;
+    this.startStatusBarLoop();
+
+    if (fs.existsSync(this.musicFolder)){
+      this.musicList["全部"] = fs.readdirSync(this.musicFolder)
+        .filter(file => file.endsWith(".json"))
+        .map(file => file.replace(".json", ""));
+    }
+    if (fs.existsSync(this.artFolder)){
+      this.artList = fs.readdirSync(this.artFolder)
+        .filter(file => file.endsWith(".txt"))
+        .map(file => file.replace(".txt", ""));
+    }
+    if (fs.existsSync(this.mathDbPath)){
+      try {
+        const mathData = JSON.parse(fs.readFileSync(this.mathDbPath, "utf-8"));
+        this.allMathTopics = [...new Set(mathData.map(q => q.topic).filter(t => t))].map(t => t.trim());
+      } catch (err){
+        this.emit("log", `ERROR: ${err.message}`);
+      }
+    }
+  }
+
+  start() {
+    this.wsServer = websocket
+      .createServer((conn) => this.onOpen(conn))
+      .listen(this.port, () => {
+        this.emit("log", `✅ WebSocket 伺服器已啟動於端口 ${this.port}`);
+        this.emit(
+          "status-update",
+          `等待連線中... (/wsserver localhost:${this.port})`
+        );
+      });
+
+    this.wsServer.on("error", (err) => this.onError(null, err));
+  }
+
+  stop(reason = "已停止") {
+    if (this.wsServer) {
+      this.wsServer.close(() => this.emit("log", "🛑 WebSocket 伺服器已停止"));
+      this.wsServer = null;
+    }
+
+    if (this.clientConn) {
+      this.clientConn?.socket.destroy();
+      this.clientConn = null;
+    }
+
+    this.emit("status-update", reason);
+  }
+
+  onOpen(conn) {
+    this.emit("log", `🔗 客戶端已連線: ${conn.socket.remoteAddress}`);
+    this.emit("status-update", "連線成功");
+    this.clientConn = conn;
+
+    this.sendMessage("§l§b- WebSocket連接成功!");
+    this.eventSubscribe("PlayerMessage");
+
+    conn.on("text", (msg) => this.onMessage(conn, msg));
+    conn.on("close", (code, reason) => this.onClose(conn, code, reason));
+    conn.on("error", (err) => this.onError(conn, err));
+  }
+
+  onMessage(conn, message) {
+    try {
+      const data = JSON.parse(message);
+      const header = data.header || {};
+      const body = data.body || {};
+
+      if (header.eventName === "PlayerMessage" && body.type === "chat") {
+        const sender = body.sender;
+        const msg = body.message;
+        this.playerMessage(sender, msg);
+      } else if (header.messagePurpose === "commandResponse") {
+        const requestId = header.requestId;
+        const statusMessage = body.statusMessage || "success";
+        const batchId = this.requestIdToBatchId.get(requestId);
+
+        if (batchId && this.commandBatches.has(batchId)) {
+          this.requestIdToBatchId.delete(requestId);
+          const batch = this.commandBatches.get(batchId);
+          batch.results.push(statusMessage);
+
+          if (batch.results.length === batch.commandCount) {
+            clearTimeout(batch.timeout);
+            this.commandBatches.delete(batchId);
+            batch.resolve(batch.results); // 當批次中的所有指令都完成時，解析 Promise
+          }
+        }
+      }
+    } catch (err) {
+      this.emit("log", `❌ 解析 JSON 時出錯: ${err.message}`);
+    }
+  }
+
+  async playerMessage(sender, message) {
+    // --- 新增：冷卻時間檢查邏輯 ---
+    if (this.cooldown > 0) {
+      const now = Date.now();
+      const lastMessageTime = this.playerCooldowns.get(sender);
+
+      if (lastMessageTime) {
+        const timeElapsed = (now - lastMessageTime) / 1000; // 轉換為秒
+        if (timeElapsed < this.cooldown) {
+          const remainingTime = Math.ceil(this.cooldown - timeElapsed);
+          this.sendMessage(
+            `§e<AI> §c${sender} 的冷卻時間還有 ${remainingTime} 秒`
+          );
+          return; // 中斷後續執行
+        }
+      }
+      this.playerCooldowns.set(sender, now); // 更新玩家的最後發言時間
+    }
+    // --- 冷卻邏輯結束 ---
+    if (this.weatherWakeWord && message.includes(this.weatherWakeWord)){
+      const city = message.replace(this.weatherWakeWord, "").trim();
+      if (city){
+        await this.fetchAndSendWeather(city);
+      } else {
+        this.sendMessage("§c請輸入正確的城市名稱");
+      }
+      return;
+    }
+
+    if (this.artWakeWord && message.includes(this.artWakeWord)){
+      if (sender === "liu owo roc"){
+        const art_name = message.replace(this.artWakeWord, "").trim();
+        if (!art_name){
+          this.sendMessage("§c請輸入畫作名稱");
+          return;
+        }
+
+        const filePath = path.join(__dirname, "commands", `${art_name}.txt`);
+        if (fs.existsSync(filePath)){
+          await this.paintingBuild(art_name);
+        } else {
+          // 模糊搜尋
+          let bestMatch = null;
+          let highestSimilarity = 0;
+          this.artList.forEach(art => {
+            const similarity = getSimilarity(art_name, art);
+            if (similarity > highestSimilarity){
+              highestSimilarity = similarity;
+              bestMatch = art;
+            }
+          });
+
+          this.sendPrivateMessage(sender, `§c[繪圖系統] 找不到畫作「${art_name}」`);
+          if (bestMatch && highestSimilarity > 0.4) this.sendPrivateMessage(sender, `§e你是不是要找：${bestMatch}？`);
+        }
+      } else {
+        this.sendPrivateMessage(sender, "§c[系統] 你沒有權限使用此功能");
+      }
+      return;
+    }
+
+    if (this.musicWakeWord && message.includes(this.musicWakeWord)){
+      const musicName = message.replace(this.musicWakeWord, "").trim();
+      if (musicName){
+        const filePath = path.join(__dirname, "music", `${musicName}.json`);
+        if (fs.existsSync(filePath)){
+          this.musicQueue.push(musicName);
+          this.sendMessage(`§e[音樂] 已將 §b${musicName} §e加入播放清單 (目前共 ${this.musicQueue.length} 首)`);
+          if (!this.isPlayingMusic) this.playNextMusic();
+        } else {
+          // 模糊搜尋
+          const allSongs = this.musicList["全部"] || [];
+          let bestMatch = null;
+          let highestSimilarity = 0;
+
+          allSongs.forEach(song => {
+            const similarity = getSimilarity(musicName, song);
+            if (similarity > highestSimilarity){
+              highestSimilarity = similarity;
+              bestMatch = song;
+            }
+          });
+
+          if (bestMatch && highestSimilarity > 0.4){
+            this.sendPrivateMessage(sender, `§c[音樂] 找不到歌曲「${musicName}」`);
+            this.sendPrivateMessage(sender, `§e你是不是要搜尋：${bestMatch}？`);
+            this.sendPrivateMessage(sender, `§7輸入 -music?${bestMatch} 播放`);
+          } else {
+            this.sendPrivateMessage(sender, `§c[音樂] 找不到歌曲「${musicName}」`);
+          }
+        }
+      } else {
+        this.sendMessage("§c音樂播放錯誤，請輸入歌名");
+      }
+      return;
+    }
+    if (this.nextWakeWord && message.includes(this.nextWakeWord)){
+      if (sender === "liu owo roc"){
+        if (this.isPlayingMusic){
+          this.isDatapackPlaying = false;
+          this.sendMessage("§e[音樂] 已切換至下一首");
+          setTimeout(() => {
+            this.playNextMusic();
+          }, 200);
+        } else {
+          this.sendMessage("§c[音樂] 目前沒有播放中的音樂");
+        }
+      } else {
+        this.sendPrivateMessage(sender, "§c[系統] 你沒有權限使用此功能");
+      }
+      return;
+    }
+    if (this.stopWakeWord && message.includes(this.stopWakeWord)){
+      if (sender === "liu owo roc"){
+        this.musicQueue = [];
+        this.isPlayingMusic = false;
+        this.isDatapackPlaying = false;
+        this.sendMessage("§e[音樂] 已停止播放並清空播放清單");
+      } else {
+        this.sendPrivateMessage(sender, "§c[系統] 你沒有權限使用此功能");
+      }
+      return;
+    }
+    if (this.playlistWakeWord && message.includes(this.playlistWakeWord)){
+      const listName = message.replace(this.playlistWakeWord, "").trim();
+      if (this.musicList[listName]){
+        let songs = [...this.musicList[listName]];
+
+        // Fisher-Yates洗牌演算法
+        for (let i = songs.length - 1; i > 0; i--){
+          const j = Math.floor(Math.random() * (i + 1));
+          [songs[i], songs[j]] = [songs[j], songs[i]];
+        }
+
+        this.sendMessage(`§e[音樂] 正在載入播放清單：「${listName}」，共 ${songs.length} 首歌`);
+        songs.forEach(song => this.musicQueue.push(song));
+        if (!this.isPlayingMusic){
+          this.playNextMusic();
+        }
+      } else {
+        const availableList = Object.keys(this.musicList).join("、");
+        this.sendMessage(`§e[音樂] 找不到該播放清單 目前可選：${availableList}`);
+      }
+      return;
+    }
+
+    if (this.examWakeWord && message.includes(this.examWakeWord)){
+      const inputTopic = message.replace(this.examWakeWord, "").trim();
+      const defaultTopic = "高中數學";
+      if (!inputTopic){
+        await this.mathQuestion(sender, defaultTopic);
+        return;
+      }
+
+      if (this.allMathTopics.includes(inputTopic)){
+        await this.mathQuestion(sender, inputTopic);
+      } else {
+        // 模糊搜尋
+        let bestMatch = null;
+        let highestSimilarity = 0;
+        this.allMathTopics.forEach(t => {
+          const similarity = getSimilarity(inputTopic, t);
+          if (similarity > highestSimilarity){
+            highestSimilarity = similarity;
+            bestMatch = t;
+          }
+        });
+
+        if (bestMatch && highestSimilarity > 0.4){
+          this.sendPrivateMessage(sender, `§c[考試系統] 找不到主題「${inputTopic}」`);
+          this.sendPrivateMessage(sender, `§e您是不是要找：${bestMatch}？`);
+          this.sendPrivateMessage(sender, `§7輸入 -exam?${bestMatch} 即可開始`);
+        } else {
+          this.sendPrivateMessage(sender, `§c[考試系統] 找不到主題「${inputTopic}」，改為練習全範圍`);
+          await this.mathQuestion(sender, defaultTopic);
+        }
+      }
+      return;
+    }
+    if (this.answerWakeWord && message.includes(this.answerWakeWord)){
+      if (!this.exams.has(sender)){
+        this.sendPrivateMessage(sender, `§c[考試系統] 目前你沒有再進行的考試 請輸入-exam?...`)
+        return;
+      }
+      const userAnswer = message.replace(this.answerWakeWord, "").trim().toUpperCase();
+      this.checkAnswer(sender, userAnswer);
+      return;
+    }
+
+    if (this.helpWakeWord && message.includes(this.helpWakeWord)){
+        this.sendPrivateMessage(sender, "§b----- liu_ouo_tw的指令小精靈 -----\n")
+        this.sendPrivateMessage(sender, "§e-ai?§g<指令>   §f- §l§a召喚AI§r\n")
+        this.sendPrivateMessage(sender, "§e-weather?§g<現實世界中的位置>   §f- §l§a查詢當地的天氣§r\n")
+        this.sendPrivateMessage(sender, "§e-music?§g<檔名>   §f- §l§a播放音樂/將音樂加入待播清單§r\n")
+        this.sendPrivateMessage(sender, "§e-playlist?§g<播放清單名稱>   §f- §l§a播放播放清單中的歌曲§r\n")
+        this.sendPrivateMessage(sender, "§e-exam?   §f- §l§a開始進行數學刷題練習§r\n")
+        this.sendPrivateMessage(sender, "§e-answer?§g<答案>   §f- §l§a在考試過程中進行作答\n")
+        this.sendPrivateMessage(sender, "                   §a(答案可能是：a、B、CE、(2,3)、23/7等)§r\n")
+        this.sendPrivateMessage(sender, "§e-next   §f- §l§a播放下一首歌§r§7(僅管理員可使用此功能)§r\n")
+        this.sendPrivateMessage(sender, "§e-stop   §f- §l§a停止播放所有歌曲並清空待播放清單§r§7(僅管理員可使用此功能)")
+        this.sendPrivateMessage(sender, "§e-art?§g<檔名>   §f- §l§a生成畫作§r§7(僅管理員可使用此功能)§r\n")
+        this.sendPrivateMessage(sender, "§6待新增更多功能...")
+      return;
+    }
+
+    if (this.playerRegex && !new RegExp(this.playerRegex).test(sender)) return;
+    if (this.aiWakeWord && !message.includes(this.aiWakeWord)) return;
+
+    const initialTurn = await this.minecraftAI.processUserMessage(
+      `<${sender}> ${message}`
+    );
+    await this.handleAITurn(initialTurn);
+  }
+
+  /**
+   * 處理 AI 的一輪回應，可能包含文字和指令
+   * @param {{text: string|null, commands: string[], newSession: boolean}} aiTurn
+   */
+  async handleAITurn(aiTurn) {
+    if (aiTurn.newSession) {
+      this.sendMessage("新對話已開始");
+    }
+
+    if (aiTurn.text) {
+      this.sendMessage(`§e<AI> §r${aiTurn.text}`);
+    }
+
+    if (aiTurn.commands && aiTurn.commands.length > 0) {
+      try {
+        this.emit(
+          "log",
+          `準備執行 ${aiTurn.commands.length} 個指令...`
+        );
+        const results = await this.executeCommands(aiTurn.commands);
+        this.emit(
+          "log",
+          `所有指令執行完畢，將 ${results.length} 個結果傳回 AI`
+        );
+        const nextAITurn = await this.minecraftAI.processCommandResults(results);
+        await this.handleAITurn(nextAITurn); // 遞迴處理 AI 的下一輪回應
+      } catch (error) {
+        this.emit("log", `❌ 執行指令批次時出錯: ${error}`);
+        this.sendMessage(`§c執行指令批次時出錯: ${error}`);
+      }
+    }
+  }
+
+  // 查天氣
+  async fetchAndSendWeather(city){
+    try {
+      const GOOGLE_API_KEY = this.geocodingApiKey;
+      const apiKey = this.openweatherApiKey;
+
+      if (!GOOGLE_API_KEY || !apiKey){
+        this.sendMessage("§c[系統] 尚未設定天氣或地理編碼 API Key，無法查詢");
+        return;
+      }
+
+      this.emit("log", `正在為「${city}」進行地理編碼轉換...`);
+      const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&language=zh-TW&key=${GOOGLE_API_KEY}`;
+      const geoRes = await axios.get(geoUrl);
+
+      if (geoRes.data.status !== "OK"){
+        this.sendMessage(`§c很抱歉，地圖系統找不到「${city}」這個地方`);
+        return;
+      }
+      
+      const location = geoRes.data.results[0];
+      const standardName = location.formatted_address;
+      const { lat, lng } = location.geometry.location;
+
+      const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}&units=metric&lang=zh_tw`;
+      const res = await axios.get(url);
+      const data = res.data;
+
+      const {
+        coord,
+        main,
+        weather,
+        visibility
+      } = data;
+
+      const report = [
+        `§b---------- ${standardName} 的即時天氣報告 ----------`,
+        `§f位置：§7  約在經度${coord.lon}/緯度${coord.lat}的地方`,
+        `§f天氣狀況：§e${weather[0].description}`,
+        `§f目前氣溫：§6${main.temp}°C （體感：${main.feels_like}°C）`,
+        `§f  溫差：§a  最低${main.temp_min}°C / 最高${main.temp_max}°C`,
+        `§f  環境：§3  濕度 ${main.humidity}% / 氣壓 ${main.pressure}hPa`,
+        `§f能見度：§d  ${(visibility / 1000).toFixed(1)}km`,
+        `§b----- 感謝收看 liu_ouo_tw天氣台 --------`
+      ].join("\n");
+
+      this.sendMessage(report);
+    } catch (err) {
+      if (err.response && err.response.status === 404){
+        this.sendMessage(`§c很抱歉，找不到「${city}」這個城市。`);
+      } else {
+        console.error("天氣查詢錯誤：", err.message);
+        this.sendMessage(`§c天氣系統暫時發生問題，請稍後再試`)
+      }
+    }
+  }
+
+  // 繪圖
+  async paintingBuild(art_name){
+    try{
+      const filePath = path.join(this.artFolder, `${art_name}.txt`);
+      if (!fs.existsSync(filePath)){
+        this.sendMessage(`§c[繪圖系統] 找不到名為 "${art_name}" 的指令檔`);
+        this.emit("log", `❌ 檔案不存在: ${filePath}`);
+        return;
+      }
+      this.sendMessage(`§e[繪圖系統] 正在讀取 "${art_name}" 並準備執行...`);
+      
+      const data = fs.readFileSync(filePath,"utf-8");
+      const commands = data.split(/\r?\n/).filter(line => line.trim() !== "");
+
+      let count = 0;
+      for (const cmd of commands){
+        this.runCommand(cmd.trim());
+        count ++;
+        if (count % 15 === 0){
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+      this.sendMessage(`§b[繪圖系統] "${art_name}" 繪製完成！`);
+      this.emit("log", `✅ 成功執行 ${art_name} 共 ${count} 條指令`);
+    } catch (err){
+      this.emit("log", `❌ 執行畫作時出錯: ${err.message}`);
+      this.sendMessage("§c[繪圖系統] 執行過程中發生錯誤，請檢查後台 Log");
+    }
+  }
+
+  // 音樂
+  async playNextMusic(){
+    if (this.musicQueue.length === 0){
+      this.isPlayingMusic = false;
+      this.isDatapackPlaying = false;
+      this.currentSongName = "";
+      this.sendMessage("§a[音樂] 已播放完畢，請加入音樂");
+      return;
+    }
+    const nextSong = this.musicQueue.shift();
+    setTimeout(() => {
+      this.playDatapackMusic(nextSong);
+    }, 100);
+  }
+  formatTime(second){
+    const min = Math.floor(second / 60);
+    const sec = Math.floor(second % 60);
+    return `${min}:${sec.toString().padStart(2, "0")}`
+  }
+  async playDatapackMusic(songName){
+    const filePath = path.join(this.musicFolder, `${songName}.json`);
+    if (!fs.existsSync(filePath)) {
+      this.sendMessage(`§c[音樂] 找不到檔案: ${songName}.json`);
+      this.playNextMusic();
+      return;
+    }
+
+    const songData = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    this.isPlayingMusic = true;
+    this.isDatapackPlaying = true;
+    this.currentSongName = songName;
+    this.totalSongTicks = songData.length > 0 ? songData[songData.length - 1].t : 0;
+    this.currentSongTick = 0;
+
+    const startTime = Date.now();
+    let index = 0;
+
+    const timer = setInterval(() => {
+      if (!this.isDatapackPlaying){
+        clearInterval(timer);
+        return;
+      }
+
+      const elapsedTicks = Math.floor((Date.now() - startTime) / 50);
+      this.currentSongTick = elapsedTicks;
+
+      while (index < songData.length && songData[index].t <= elapsedTicks){
+        const note = songData[index];
+
+        this.runCommand(`playsound ${note.i} @a ~ ~ ~ 2 ${note.p.toFixed(4)}`);
+        index ++;
+      }
+
+      if (index >= songData.length){
+        clearInterval(timer);
+        setTimeout(() => {
+          if (this.isDatapackPlaying){
+            this.playNextMusic();
+          }
+        }, 3000);
+      }
+    }, 20);
+  }
+
+  // 拿著時鐘的效果
+  startStatusBarLoop(){
+    setInterval(() => {
+      if (!this.clientConn) return;
+      const now = new Date();
+      const realTimeStr = now.toLocaleTimeString('zh-TW', { 
+        hour12: false, 
+        timeZone: 'Asia/Taipei' 
+      });
+
+      if (!this.isPlayingMusic || !this.isDatapackPlaying){
+        const raw = { rawtext: [{ text: `現在時間(UTC+8)： §7${realTimeStr}` }] };
+        this.runCommand(`titleraw @a[hasitem={item=clock,location=slot.weapon.mainhand}] actionbar ${JSON.stringify(raw)}`);
+      } else {
+        const currentTick = this.currentSongTick || 0;
+        const totalTicks = this.totalSongTicks || 1;
+        const persent = totalTicks > 0 ? ((currentTick / totalTicks) * 100).toFixed(1) : 0;
+
+        const currentSec = currentTick / 20;
+        const totalSec = totalTicks / 20;
+        const currentTimeStr = this.formatTime(currentSec);
+        const totalTimeStr = this.formatTime(totalSec);
+
+        const raw = {
+          rawtext: [
+            {text: `            §e正在播放: §b${this.currentSongName || "音樂"}\n`},
+            {text: `§f[${currentTimeStr} / ${totalTimeStr}] §6${persent}% §8| §f現在時間(UTC+8)： §7${realTimeStr}`}
+          ]
+        };
+        this.runCommand(`titleraw @a[hasitem={item=clock,location=slot.weapon.mainhand}] actionbar ${JSON.stringify(raw)}`);
+      }
+    }, 500);
+  }
+
+  // 數學練習
+  async mathQuestion(playerName, topic){
+    try{
+      if (this.exams.has(playerName)) {
+        this.sendPrivateMessage(playerName, "§c[考試系統] 你已經在考試中，請完成後再重新開始。");
+        return;
+      }
+      // 讀取
+      const filePath = path.join(__dirname, "math_db.json");
+      const allData = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+
+      let pool = allData;
+      if (topic !== "高中數學"){
+        pool = allData.filter(q => q.topic === topic);
+      }
+      if (pool.length < 6){
+        if (topic !== "高中數學"){
+          this.sendPrivateMessage(playerName, `§7主題「${topic}」題目較少，已混合其他題目`);
+        }
+        pool = allData;
+      }
+      const playerStats = this.getPlayerStats(playerName);
+
+      // 計算遺忘曲線
+      const weightedData = pool.map(q => {
+        let weight = 1.0;
+        const record = playerStats.mastery[q.id];
+
+        if (record){
+          const hoursSinceLast = (Date.now() - record.last_time) / (1000 * 60 * 60);
+          weight = (1 / (record.correct_count + 1)) * (1 + hoursSinceLast / 168);
+        }
+        return {...q, currentWeight: weight};
+      });
+
+      const sampleByWeight = (arr, n) => {
+        if (arr.length <= n) return arr;
+        return arr
+          .sort((a, b) => b.currentWeight - a.currentWeight)
+          .slice(0, n * 2)
+          .sort(() => 0.5 - Math.random())
+          .slice(0, n);
+      };
+
+      const singles = weightedData.filter(q => q.type === "single");
+      const multiples = weightedData.filter(q => q.type === "multiple");
+      const maths = weightedData.filter(q => q.type === "math");
+      
+      const examSet = [
+        ...sampleByWeight(singles, 2),
+        ...sampleByWeight(multiples, 2),
+        ...sampleByWeight(maths, 2)
+      ];
+      
+      if (examSet.length < 6){
+        this.sendPrivateMessage(playerName, "§c[考試系統] 題庫題目不足，無法組成6題測驗");
+        return;
+      }
+      
+      this.exams.set(playerName, {
+        questions: examSet,
+        currentIndex: 0,
+        score: 0
+      });
+
+      this.sendPrivateMessage(playerName, `§e[考試系統] 測驗開始 共六題 輸入-answer?作答`);
+      this.sendCurrentQuestion(playerName);
+    } catch (err){
+      console.error(err);
+      this.sendPrivateMessage(playerName, "§c題庫讀取失敗。");
+    }
+  }
+  sendCurrentQuestion(playerName){
+    const exam = this.exams.get(playerName);
+    if (!exam) return;
+
+    const q = exam.questions[exam.currentIndex];
+    setTimeout(() => {
+      this.sendPrivateMessage(playerName, `§f--------------------------------`);
+      this.sendPrivateMessage(playerName, `§e第 ${exam.currentIndex + 1} 題 (${this.translateType(q.type)})`);
+      this.sendPrivateMessage(playerName, `§a主題：§7${q.topic || "一般"}`);
+      this.sendPrivateMessage(playerName, `§f${q.question}`);
+
+      if (q.options && q.options.length > 0) {
+        q.options.forEach((opt, i) => {
+          setTimeout(() => this.sendPrivateMessage(playerName, `§7${opt}`), i * 50);
+        });
+      }
+    }, 100);
+  }
+  checkAnswer(playerName, userAnswer){
+    const exam = this.exams.get(playerName);
+    if (!exam) return;
+    
+    const currentQ = exam.questions[exam.currentIndex];
+    const correct = currentQ.answer.toUpperCase();
+    let isRight = false;
+
+    if (currentQ.type === "multiple"){
+      const sortedUser = userAnswer.split("").sort().join("");
+      const sortedCorrect = correct.split("").sort().join("");
+      isRight = (sortedUser === sortedCorrect);
+    } else {
+      isRight = (userAnswer === correct);
+    }
+
+    const stats = this.getPlayerStats(playerName);
+    if (!stats.mastery[currentQ.id]){
+      stats.mastery[currentQ.id] = { correct_count: 0, last_time: 0 };
+    }
+
+    if (isRight){
+      stats.mastery[currentQ.id].correct_count ++;
+      exam.score ++;
+      this.sendPrivateMessage(playerName, "§a§l✔ 回答正確")
+    } else {
+      stats.mastery[currentQ.id].correct_count = Math.max(0, stats.mastery[currentQ.id].correct_count - 1);
+      this.sendPrivateMessage(playerName, `§c§l✘ 回答錯誤  正確答案為§6${correct}`);
+    }
+
+    stats.mastery[currentQ.id].last_time = Date.now();
+    this.savePlayerStats(playerName, stats);
+
+    exam.currentIndex ++;
+    if (exam.currentIndex < 6){
+      setTimeout(() => this.sendCurrentQuestion(playerName), 1000);
+    } else {
+      const totalScore = exam.score;
+      this.runCommand(`playsound random.screenshot "${playerName}"`)
+      this.sendPrivateMessage(playerName, `§6§l[測驗結束] §e總共答對§a${totalScore} §e/ 6題！`);
+      this.exams.delete(playerName);
+    }
+  }
+  savePlayerStats(playerName, stats){
+    const filePath = path.join(__dirname, "players_stats.json");
+    let allStats = {};
+    if (fs.existsSync(filePath)){
+      allStats = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    }
+    allStats[playerName] = stats;
+    fs.writeFileSync(filePath, JSON.stringify(allStats, null, 2));
+  }
+  getPlayerStats(playerName){
+    const filePath = path.join(__dirname, "players_stats.json");
+    if (!fs.existsSync(filePath)) return { answer_ids: [], mastery: {} };
+    const allStats = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    return allStats[playerName] || { answer_ids: [], mastery: {} };
+  }
+  translateType(type){
+      const types = {
+        "single": "單選題",
+        "multiple": "多選題",
+        "math": "填充題"
+      };
+      return types[type] || "一般題型";
+  }
+
+  // 私訊
+  sendPrivateMessage(player, msg) {
+    const escapedMsg = JSON.stringify(msg);
+    this.runCommand(`tellraw "${player}" {"rawtext":[{"text":${escapedMsg}}]}`);
+  }
+  sendSplitPrivateMessage(player, message){
+    let remaining = message;
+    while (remaining.length > 0){
+      let bestChunk = "";
+      if (estimateFinalPayloadBytes(remaining) <= 661){
+        bestChunk = remaining;
+        remaining = ""
+      } else {
+        for (let i = 1; i < remaining.length; i++){
+          const candidate = remaining.substring(0, i);
+          if (estimateFinalPayloadBytes(candidate) > 661) break;
+          bestChunk = candidate;
+        }
+        remaining = remaining.substring(bestChunk.length);
+      }
+      const escapedMsg = JSON.stringify(bestChunk);
+      this.runCommand(`tellraw "${player}" {"rawtext":[{"text":${escapedMsg}}]}`);
+    }
+  }
+
+  /**
+   * 執行一批指令並等待所有結果
+   * @param {string[]} commands
+   * @returns {Promise<string[]>}
+   */
+  executeCommands(commands) {
+    return new Promise((resolve, reject) => {
+      const batchId = generateId();
+      const requestIds = commands.map(() => generateId());
+
+      const batch = {
+        commandCount: commands.length,
+        results: [],
+        resolve,
+        reject,
+        timeout: setTimeout(() => {
+          // 清理超時的批次
+          requestIds.forEach((reqId) => this.requestIdToBatchId.delete(reqId));
+          this.commandBatches.delete(batchId);
+          reject(`指令批次執行超時 (${this.requestTimeoutMs}ms)`);
+        }, this.requestTimeoutMs),
+      };
+      this.commandBatches.set(batchId, batch);
+
+      commands.forEach((command, index) => {
+        const requestId = requestIds[index];
+        this.requestIdToBatchId.set(requestId, batchId);
+        this.runCommand(command, requestId);
+      });
+    });
+  }
+
+  onClose(conn, code, reason) {
+    if (!this.wsServer) return;
+    this.emit("log", `🚫 客戶端已斷線: 程式碼 ${code}, 原因 ${reason}`);
+    this.emit("status-update", "已暫停: Minecraft 離線");
+  }
+
+  onError(conn, err) {
+    this.emit("log", `⚠️ 發生錯誤: ${err}`);
+    this.emit("status-update", `已暫停: ${err?.message || "未知錯誤"}`);
+  }
+
+  sendMessage(message) {
+    let remaining = message;
+    while (remaining.length > 0) {
+      let bestChunk = "";
+      let bestLength = 0;
+
+      if (estimateFinalPayloadBytes(remaining) <= WSS_MAXIMUM_BYTES) {
+        bestChunk = remaining;
+        bestLength = remaining.length;
+      } else {
+        for (let i = 1; i <= remaining.length; i++) {
+          const candidate = remaining.substring(0, i);
+          if (estimateFinalPayloadBytes(candidate) > WSS_MAXIMUM_BYTES) break;
+          bestChunk = candidate;
+          bestLength = i;
+        }
+      }
+
+      const escapedCommand = JSON.stringify(bestChunk);
+      this.runCommand(`tellraw @a {"rawtext":[{"text":${escapedCommand}}]}`);
+      remaining = remaining.substring(bestLength);
+    }
+  }
+
+  /**
+   * 執行單一指令
+   * @param {string} command - 要執行的指令
+   * @param {string | null} requestId - 用於追蹤的請求 ID
+   */
+  runCommand(command, requestId = null) {
+    const reqId = requestId || generateId();
+    const payload = JSON.stringify({
+      header: {
+        requestId: reqId,
+        messagePurpose: "commandRequest",
+        version: 17104896,
+      },
+      body: {
+        commandLine: command,
+        version: 17104896,
+      },
+    });
+
+    if (Buffer.byteLength(payload, "utf8") > WSS_MAXIMUM_BYTES) {
+      this.sendMessage("§c[runCommand] 指令太長無法執行");
+      this.emit("log", `⚠️ 傳送的酬載過大 (${payload.length} 位元組)`);
+      return;
+    }
+
+    if (requestId) {
+      this.sendMessage(`§e[runCommand] §r: ${command}`);
+      this.emit("log", `[${reqId.slice(0, 5)}] 執行中: ${command}`);
+    }
+
+    if (this.clientConn && !this.clientConn.closed) {
+      this.clientConn.sendText(payload);
+    }
+  }
+
+  eventSubscribe(eventName) {
+    const payload = {
+      header: {
+        requestId: crypto.randomUUID(),
+        messagePurpose: "subscribe",
+        version: 17104896,
+      },
+      body: {
+        eventName,
+      },
+    };
+    this.clientConn?.sendText(JSON.stringify(payload));
+    this.emit("log", `🔔 已訂閱事件: ${eventName}`);
+  }
+}
+
+module.exports = MinecraftWebSocketServer;
+
+// Levenshtein Distaance
+function getSimilarity(s1, s2){
+  let longer = s1.toLowerCase();
+  let shorter = s2.toLowerCase();
+  if (s1.length < s2.length){
+    longer = s2.toLowerCase();
+    shorter = s1.toLowerCase();
+  }
+  const longerLength = longer.length;
+  if (longerLength === 0) return 1.0;
+
+  // DP動態規劃
+  const costs = [];  // 要花多少代價(刪1 插1 替換1)
+  for (let i = 0; i <= longer.length; i++){
+    let lastValue = i;
+    for (let j = 0; j <= shorter.length; j++){
+      if (i === 0){
+        costs[j] = j;
+      } else {
+        if (j > 0){
+          let newValue = costs[j-1];
+          if (longer.charAt(i-1) !== shorter.charAt(j-1)) newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+          costs[j - 1] = lastValue;
+          lastValue = newValue;
+        }
+      }
+    }
+    if (i > 0) costs[shorter.length] = lastValue;
+  }
+  return (longerLength - costs[shorter.length]) / longerLength;
+}
