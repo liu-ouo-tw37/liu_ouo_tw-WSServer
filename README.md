@@ -11,10 +11,12 @@
 
 ## 安裝與使用 (使用者版)
 1.  前往 [Releases](https://github.com/liu-ouo-tw37/liu_ouo_tw-WSServer/releases/tag/v1.0.0) 下載最新的安裝程式的Setup (`.exe`)。
-2.  安裝完成後，進入安裝目錄下的 `resources` 資料夾。
+2.  安裝完成後，進入安裝目錄下的 `resources` 資料夾
+      * *(檔案位置範例：`C:\Users\Owner\AppData\Local\Programs\Minecraft_WSServer\resources`)*
 3.  **自定義資源**：
-    * 將音樂 JSON 放入 `resources/music/`。
-    * 將指令文字檔放入 `resources/commands/`。
+    * 將音樂 JSON 放入 `resources/music/`
+    * 將指令文字檔放入 `resources/commands/`
+    * 數A複習題庫在 `math_db.json`
 4.  啟動程式，輸入你的 **Gemini API Key**、**OpenWeather API Key**和**Geocoding API Key**。
 5.  在 Minecraft 遊戲內輸入：`/connect localhost:5218` (或你設定的連接埠)。
 
