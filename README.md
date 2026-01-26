@@ -18,7 +18,8 @@
     * 將指令文字檔放入 `resources/commands/`
     * 數A複習題庫在 `math_db.json`
 4.  啟動程式，輸入你的 **Gemini API Key**、**OpenWeather API Key**和**Geocoding API Key**。
-5.  在 Minecraft 遊戲內輸入：`/connect localhost:5218` (或你設定的連接埠)。
+5.  在 Minecraft 遊戲內輸入：`/connect localhost:5218` (或你設定的連接埠)連接WSServer。
+6.  連接後輸入`-help`取得更詳細的功能介紹。
 
 ## 注意：
 如果要使用繪畫功能以及暫停音樂、播放下一首音樂之功能
