@@ -1,4 +1,4 @@
-# Minecraft AI WebSocket Server (Gemini 整合版)
+<img width="588" height="375" alt="image" src="https://github.com/user-attachments/assets/b43b5512-4304-4518-9e30-a5c6c3928268" /># Minecraft AI WebSocket Server (Gemini 整合版)
 
 這是一個為 Minecraft 基岩版 (Minecraft Bedrock Edition) 設計的 WebSocket 伺服器，整合了 Google Gemini AI。它能讓你在遊戲中透過聊天室與 AI 互動、播放自定義紅石音樂、甚至讓 AI 幫你執行遊戲指令。
 
@@ -25,6 +25,15 @@
 如果要使用繪畫功能以及暫停音樂、播放下一首音樂之功能
 必須到檔案裡的`MinecraftWebSocketServer.js`裡更改使用權限(預設是只限作者我本人)
 你可以把第182、249、265行的`sender === "liu owo roc"` 改成自己的遊戲id
+
+你必須自己到 [https://openweathermap.org/api](url) 生成一個自己的API Key
+在打開程式後輸入你的API Key，並到 [Geocoding API](https://console.cloud.google.com/apis/library/geocoding-backend.googleapis.com?project=gen-lang-client-0143136948)的地方
+登入並啟用你的Geocoding API，然後將API Key輸入到你程式頁面
+(有免費每個月10000次的額度，但要綁定你的信用卡/簽帳金融卡)
+接著就可以使用查詢天氣的功能了
+<img width="588" height="375" alt="image" src="https://github.com/user-attachments/assets/5ba8ca87-9d3c-44d4-820a-1e7e0154330f" />
+
+詳細啟用Geocoding API的教學：[https://youtu.be/pRiQeo17u6c](url)
 
 ## 功能介紹：
 1. 輸入 **-help** 在遊戲中看功能介紹
