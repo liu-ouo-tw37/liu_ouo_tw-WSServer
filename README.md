@@ -22,15 +22,13 @@
 6.  **連接後輸入`-help`取得更詳細的功能介紹。**
 
 ## 注意：
-如果要使用繪畫功能以及暫停音樂、播放下一首音樂之功能
-必須到檔案裡的`MinecraftWebSocketServer.js`裡更改使用權限(預設是只限作者我本人)
-你可以把第182、249、265行的`sender === "liu owo roc"` 改成自己的遊戲id
+1. 如果要使用繪畫功能以及暫停音樂、播放下一首音樂之功能，必須到檔案裡的`MinecraftWebSocketServer.js`裡更改使用權限(預設是只限作者我本人)。你可以把第182、249、265行的`sender === "liu owo roc"` 改成自己的遊戲id。
 
-你必須自己到 [https://openweathermap.org/api](url) 生成一個自己的API Key
-在打開程式後輸入你的API Key，並到 [Geocoding API](https://console.cloud.google.com/apis/library/geocoding-backend.googleapis.com?project=gen-lang-client-0143136948)的地方
-登入並啟用你的Geocoding API，然後將API Key輸入到你程式頁面
-(有免費每個月10000次的額度，但要綁定你的信用卡/簽帳金融卡)
-接著就可以使用查詢天氣的功能了！
+2. 你必須自己到 [https://openweathermap.org/api](url) 生成一個自己的API Key
+   在打開程式後輸入你的API Key，並到 [Geocoding API](https://console.cloud.google.com/apis/library/geocoding-backend.googleapis.com?project=gen-lang-client-0143136948)的地方
+   登入並啟用你的Geocoding API，然後將API Key輸入到你程式頁面
+   (有免費每個月10000次的額度，但要綁定你的信用卡/簽帳金融卡)
+   接著就可以使用查詢天氣的功能了！
 
 <img width="588" height="375" alt="image" src="https://github.com/user-attachments/assets/5ba8ca87-9d3c-44d4-820a-1e7e0154330f" />
 
