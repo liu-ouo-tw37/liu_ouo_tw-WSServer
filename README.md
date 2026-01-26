@@ -1,6 +1,6 @@
-<img width="588" height="375" alt="image" src="https://github.com/user-attachments/assets/b43b5512-4304-4518-9e30-a5c6c3928268" /># Minecraft AI WebSocket Server (Gemini 整合版)
+# Minecraft AI WebSocket Server
 
-這是一個為 Minecraft 基岩版 (Minecraft Bedrock Edition) 設計的 WebSocket 伺服器，整合了 Google Gemini AI。它能讓你在遊戲中透過聊天室與 AI 互動、播放自定義紅石音樂、甚至讓 AI 幫你執行遊戲指令。
+這是一個為 Minecraft 基岩版 (Minecraft Bedrock Edition) 設計的 WebSocket 伺服器，整合了 Google Gemini AI。內有許多功能，往下看可獲得詳細介紹。
 
 ## 核心功能
 * **AI 智能對話**：整合 Gemini API，支援自定義 System Prompt 與函式呼叫 (Function Calling)。
