@@ -26,7 +26,7 @@
 
 2. 你必須自己到 [https://openweathermap.org/api](url) 生成一個自己的API Key，
    在打開程式後輸入你的API Key，並到 [Geocoding API](https://console.cloud.google.com/apis/library/geocoding-backend.googleapis.com?project=gen-lang-client-0143136948)的地方，
-   登入並啟用你的Geocoding API，然後將API Key輸入到你程式頁面，
+   登入並啟用你的Geocoding API，然後將API Key輸入到你程式頁面
    (有免費每個月10000次的額度，但要綁定你的信用卡/簽帳金融卡)，
    接著就可以使用查詢天氣的功能了！
 
