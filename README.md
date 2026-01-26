@@ -1,4 +1,4 @@
-# Minecraft AI WebSocket Server
+# liu_ouo_tw Minecraft WebSocket Server
 
 這是一個為 Minecraft 基岩版 (Minecraft Bedrock Edition) 設計的 WebSocket 伺服器，整合了 Google Gemini AI。內有許多功能，往下看可獲得詳細介紹。
 
