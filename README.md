@@ -8,6 +8,7 @@
 * **指令畫作繪製**：讀取 `commands/` 中的 .txt 檔案，自動生成遊戲內建築或畫作。
 * **即時天氣與定位**：內建 OpenWeather API，支援遊戲內查詢現實世界天氣。
 * **複習學測數A系統**：支援從 `math_db.json` 讀取題目進行互動遊戲。
+* **迷宮生成器**：自動隨機生成指定大小的迷宮。
 
 ## 安裝與使用 (使用者版)
 1.  前往 [Releases](https://github.com/liu-ouo-tw37/liu_ouo_tw-WSServer/releases/tag/v1.0.0) 下載最新的安裝程式的Setup (`.exe`)。
