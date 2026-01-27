@@ -11,7 +11,7 @@
 * **迷宮生成器**：自動隨機生成指定大小的迷宮。
 
 ## 安裝與使用 (使用者版)
-1.  前往 [Releases](https://github.com/liu-ouo-tw37/liu_ouo_tw-WSServer/releases/tag/v1.0.0) 下載最新的安裝程式的Setup (`.exe`)。
+1.  前往 [Releases](https://github.com/liu-ouo-tw37/liu_ouo_tw-WSServer/releases) 下載最新的安裝程式的Setup (`.exe`)。
 2.  安裝完成後，進入安裝目錄下的 `resources` 資料夾
       * *(檔案位置範例：`C:\Users\Owner\AppData\Local\Programs\Minecraft_WSServer\resources`)*
 3.  **自定義資源**：
