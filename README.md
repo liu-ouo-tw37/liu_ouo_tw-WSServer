@@ -9,6 +9,9 @@
 * **即時天氣與定位**：內建 OpenWeather API，支援遊戲內查詢現實世界天氣。
 * **複習學測數A系統**：支援從 `math_db.json` 讀取題目進行互動遊戲。
 * **迷宮生成器**：自動隨機生成指定大小的迷宮。
+* **地震偵測**：偵測台灣的地震情況。
+* **CPU效能監測**：監測CPU使用情況。
+* **計算機**：就是計算機(支援工程數學)。
 
 ## 安裝與使用 (使用者版)
 1.  前往 [Releases](https://github.com/liu-ouo-tw37/liu_ouo_tw-WSServer/releases) 下載最新的安裝程式的Setup (`.exe`)。
@@ -23,7 +26,7 @@
 6.  **連接後輸入`-help`取得更詳細的功能介紹。**
 
 ## 注意：
-1. 如果要使用繪畫功能以及暫停音樂、播放下一首音樂之功能，必須到檔案裡的`MinecraftWebSocketServer.js`裡更改使用權限(預設是只限作者我本人)。你可以把第182、249、265行的`sender === "liu owo roc"` 改成自己的遊戲id。
+1. 如果要使用繪畫功能以及暫停音樂、播放下一首音樂等數個功能，必須到檔案目錄中`admin.txt`裡更改管理員白名單，輸入你的遊戲id
 
 2. 你必須自己到 [https://openweathermap.org/api](url) 生成一個自己的API Key，
    在打開程式後輸入你的API Key，並到 [Geocoding API](https://console.cloud.google.com/apis/library/geocoding-backend.googleapis.com?project=gen-lang-client-0143136948)的地方，
@@ -31,11 +34,16 @@
    (有免費每個月10000次的額度，但要綁定你的信用卡/簽帳金融卡)，
    接著就可以使用查詢天氣的功能了！
 
-<img width="588" height="375" alt="image" src="https://github.com/user-attachments/assets/5ba8ca87-9d3c-44d4-820a-1e7e0154330f" />
+<img width="1191" height="753" alt="image" src="https://github.com/user-attachments/assets/598ac429-fe0d-4ced-a7a2-5af6005660f2" />
 
 詳細啟用Geocoding API的教學影片：[https://youtu.be/pRiQeo17u6c](url)
 
 3. 播放清單打「全部」會隨機播放所有歌曲
+   
+4. 要使用地震偵測系統，必須先去[中央氣象署網站](https://opendata.cwa.gov.tw/user/authkey)獲得API Key才能使用，使用方法同上
+
+5. 要使用計算機，要先去[Wolfram Alpha Developer](https://developer.wolframalpha.com/)獲得API Key，其餘同上
+
 
 ## 功能介紹：
 1. 輸入 **-help** 在遊戲中看功能介紹
@@ -50,5 +58,8 @@
 10. 輸入 **-answer?`<答案>`** 在考試中進行作答(若不在考試中則無效) *e.g. `-answer?ACD`  /  `-answer?(11,3)`*
 11. 拿著時鐘，會顯示當下的時間(台灣時間UTF+8)，如果正在播放歌曲，同時會顯示目前的歌曲名稱及播放秒數、百分比
 12. 輸入 **-maze?`<長>*<寬>`** 生成 x ⨉ z 大小的迷宮 *e.g. `-maze?20*30`*
+13. 輸入 **-earthquake?** 開啟或關閉自動地震偵測(預設關閉)
+14. 輸入 **-cpu** 及 **-cpu_stop?** 開啟或關閉cpu監測牆(統一出現在`200 -60 -40`的位置及Actionbar)
+15. 輸入 **-calc?`<數學問題>`** 計算數學問題，支援微積分極限求和三角函數等問題
 
-~~P.S. AI的部分是從易爆那偷的~~
+~~P.S. AI的部分是從易爆那拿來當範本的，所以不在我的核心功能裡~~
