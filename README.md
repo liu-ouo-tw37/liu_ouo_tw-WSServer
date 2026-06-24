@@ -34,7 +34,7 @@
    (有免費每個月10000次的額度，但要綁定你的信用卡/簽帳金融卡)，
    接著就可以使用查詢天氣的功能了！
 
-<img width="1518" height="1371" alt="image" src="https://github.com/user-attachments/assets/8c269cc1-4795-4fd0-9f0e-2e5fb3b182c6" />
+<img width="1518" height="1416" alt="image" src="https://github.com/user-attachments/assets/21bfd5d7-8b16-4ef9-b2fa-b68935fe9d5b" />
 
 詳細啟用Geocoding API的教學影片：[https://youtu.be/pRiQeo17u6c](url)
 
