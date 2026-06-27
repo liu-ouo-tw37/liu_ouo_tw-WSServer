@@ -29,7 +29,7 @@
 ## 注意：
 1. 如果要使用繪畫功能以及暫停音樂、播放下一首音樂等數個功能，必須到檔案目錄中`admin.txt`裡更改管理員白名單，輸入你的遊戲id
 
-2. 你必須自己到 [https://openweathermap.org/api](url) 生成一個自己的API Key，
+2. 你必須自己到 [Openweather官網](https://openweathermap.org/api) 生成一個自己的API Key，
    在打開程式後輸入你的API Key，並到 [Geocoding API](https://console.cloud.google.com/apis/library/geocoding-backend.googleapis.com?project=gen-lang-client-0143136948)的地方，
    登入並啟用你的Geocoding API，然後將API Key輸入到你程式頁面
    (有免費每個月10000次的額度，但要綁定你的信用卡/簽帳金融卡)，
@@ -41,11 +41,11 @@
 
 3. 播放清單打「全部」會隨機播放所有歌曲
    
-4. 要使用地震偵測系統，必須先去[中央氣象署網站](https://opendata.cwa.gov.tw/user/authkey)獲得API Key才能使用，使用方法同上
+4. 要使用地震偵測系統，必須先去 [中央氣象署網站](https://opendata.cwa.gov.tw/user/authkey) 獲得API Key才能使用，使用方法同上
 
-5. 要使用計算機，要先去[Wolfram Alpha Developer](https://developer.wolframalpha.com/)獲得API Key，其餘同上
+5. 要使用計算機，要先去 [Wolfram Alpha Developer](https://developer.wolframalpha.com/) 獲得API Key，其餘同上
 
-6. 要連接Discord Bot，要先去[https://discord.com/developers/applications](url)申請一個Discord機器人，並新增機器人，到機器人設定頁面重設權杖(Token)並複製，
+6. 要連接Discord Bot，要先去 [Discord Developers Applications](https://discord.com/developers/applications) 申請一個Discord機器人，並新增機器人，到機器人設定頁面重設權杖(Token)並複製，
    並下滑打開Presence Intent、Server Members Intent和Message Content Intent，然後到OAuth2，找到OAuth2 URL 產生器並點選bot
    ，往下點選查看頻道、傳送訊息和讀取訊息歷史紀錄，然後將下方的URL貼到瀏覽器並加入到你的伺服器，接著右鍵你想要他發送的頻道並點擊複製頻道ID(記得開啟開發者模式)，
    最後在我的程式頁面指定位置填入頻道ID和Token就好了
