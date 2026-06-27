@@ -1,5 +1,19 @@
 # 更新日誌
 
+## [1.7.0] - 2026-06-28
+
+#### Added
+- **全新核心功能：連接Discord Bot**：
+  - 新增連接Discord Bot的功能，正式支援將Minecraft與Discord機器人即時雙向通訊
+  - **遊戲與Discord訊息互通**：玩家在Minecraft內的發言會即時同步轉發至指定的Discord頻道，並自動去除特殊顏色代碼字元，同時Discord頻道中的聊天文字內容也會自動加上用戶名稱並推送到Minecraft聊天室中
+  - **Discord遠端指令觸發**：支援在Discord指定頻道中直接輸入Minecraft原生指令（如`/setblock 11 45 14 command_block`、`/give @a barrier 67`等），或是自訂的核心功能指令（如`-weather?`、`-weather_predicts?`、`-music?`等），Bot會自動識別為自訂指令並將事件回拋給WSServer進行處理
+
+#### Changed
+- **變更天氣預報輸出文字格式**：
+  - 將`weather_predicts`輸出的格式改成一次輸出全部，而非一句一句傳，避免在Discord同步時的卡頓問題
+
+
+
 ## [1.6.0] - 2026-06-24
 
 #### Added
