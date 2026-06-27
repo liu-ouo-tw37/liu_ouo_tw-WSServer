@@ -12,6 +12,7 @@
 * **地震偵測**：偵測台灣的地震情況。
 * **CPU效能監測**：監測CPU使用情況。
 * **計算機**：就是計算機(支援工程數學)。
+* **Discord Bot雙向跨平台聯動**：支援串接Discord機器人，讓Minecraft遊戲內聊天室與Discord指定頻道訊息即時互通，並支援從Discord遠端發送自訂功能指令
 
 ## 安裝與使用 (使用者版)
 1.  前往 [Releases](https://github.com/liu-ouo-tw37/liu_ouo_tw-WSServer/releases) 下載最新的安裝程式的Setup (`.exe`)。
@@ -34,7 +35,7 @@
    (有免費每個月10000次的額度，但要綁定你的信用卡/簽帳金融卡)，
    接著就可以使用查詢天氣的功能了！
 
-<img width="1518" height="1416" alt="image" src="https://github.com/user-attachments/assets/21bfd5d7-8b16-4ef9-b2fa-b68935fe9d5b" />
+<img width="1518" height="1461" alt="image" src="https://github.com/user-attachments/assets/32cea0af-765c-4d03-abb6-f68d897db2bb" />
 
 詳細啟用Geocoding API的教學影片：[https://youtu.be/pRiQeo17u6c](url)
 
@@ -44,23 +45,29 @@
 
 5. 要使用計算機，要先去[Wolfram Alpha Developer](https://developer.wolframalpha.com/)獲得API Key，其餘同上
 
+6. 要連接Discord Bot，要先去[https://discord.com/developers/applications](url)申請一個Discord機器人，並新增機器人，到機器人設定頁面重設權杖(Token)並複製，
+   並下滑打開Presence Intent、Server Members Intent和Message Content Intent，然後到OAuth2，找到OAuth2 URL 產生器並點選bot
+   ，往下點選查看頻道、傳送訊息和讀取訊息歷史紀錄，然後將下方的URL貼到瀏覽器並加入到你的伺服器，接著右鍵你想要他發送的頻道並點擊複製頻道ID(記得開啟開發者模式)，
+   最後在我的程式頁面指定位置填入頻道ID和Token就好了
+
 
 ## 功能介紹：
 1. 輸入 **-help** 在遊戲中看功能介紹
 2. 輸入 **-ai?`<你給AI的指令>`** 與AI互動(預設是讓AI幫你打指令，支援中文) *e.g. `-ai?給我一個時鐘`*
 3. 輸入 **-weather?`<想要查詢的地點>`** 查詢當地的天氣狀況(支援中文) *e.g. `-weather?板橋高中`*
-4. 輸入 **-art?`<檔名>`** 生成畫作(畫作生成時，請勿移動) *e.g. `-art?2024PrideParade101`*
-5. 輸入 **-music?`<檔名>`** 播放音樂 *e.g. `-music?千本櫻`*
-6. 輸入 **-next** 播放下一首歌曲
-7. 輸入 **-stop** 停止播放並清空待播放清單裡的所有歌曲
-8. 輸入 **playlist?`<播放清單名稱>`** 隨機播放播放清單內的歌曲(隨機順序加入待播放清單) *e.g. `-playlist?全部`*
-9. 輸入 **-exam?`<主題>`** 開始進行數學刷題練習(若主題為空則預設範圍為「高中數學數A內容」) *e.g. `-exam?三角函數`*
-10. 輸入 **-answer?`<答案>`** 在考試中進行作答(若不在考試中則無效) *e.g. `-answer?ACD`  /  `-answer?(11,3)`*
-11. 拿著時鐘，會顯示當下的時間(台灣時間UTF+8)，如果正在播放歌曲，同時會顯示目前的歌曲名稱及播放秒數、百分比
-12. 輸入 **-maze?`<長>*<寬>`** 生成 x ⨉ z 大小的迷宮 *e.g. `-maze?20*30`*
-13. 輸入 **-earthquake?** 開啟或關閉自動地震偵測(預設關閉)
-14. 輸入 **-cpu** 及 **-cpu_stop?** 開啟或關閉cpu監測牆(統一出現在`200 -60 -40`的位置及Actionbar)
-15. 輸入 **-calc?`<數學問題>`** 計算數學問題，支援微積分極限求和三角函數等問題
-16. 輸入 **-playlist_edit `<動作>` `<播放清單名>` `[歌名]`** 修改(新增/移除)播放清單或其內容
+4. 輸入 **-weather_predicts?`<想要查詢的地點>`** 查詢當地的天氣預報(支援中文) *e.g. `-weather_predicts?倫敦`*
+5. 輸入 **-art?`<檔名>`** 生成畫作(畫作生成時，請勿移動) *e.g. `-art?淡水夕陽`*
+6. 輸入 **-music?`<檔名>`** 播放音樂 *e.g. `-music?愛情的大壞蛋`*
+7. 輸入 **-next** 播放下一首歌曲
+8. 輸入 **-stop** 停止播放並清空待播放清單裡的所有歌曲
+9. 輸入 **playlist?`<播放清單名稱>`** 隨機播放播放清單內的歌曲(隨機順序加入待播放清單) *e.g. `-playlist?全部`*
+10. 輸入 **-exam?`<主題>`** 開始進行數學刷題練習(若主題為空則預設範圍為「高中數學數A內容」) *e.g. `-exam?三角函數`*
+11. 輸入 **-answer?`<答案>`** 在考試中進行作答(若不在考試中則無效) *e.g. `-answer?ACD`  /  `-answer?(11,3)`*
+12. 拿著時鐘，會顯示當下的時間(台灣時間UTF+8)，如果正在播放歌曲，同時會顯示目前的歌曲名稱及播放秒數、百分比
+13. 輸入 **-maze?`<長>*<寬>`** 生成 x ⨉ z 大小的迷宮 *e.g. `-maze?20*30`*
+14. 輸入 **-earthquake?** 開啟或關閉自動地震偵測(預設關閉)
+15. 輸入 **-cpu** 及 **-cpu_stop?** 開啟或關閉cpu監測牆(統一出現在`200 -60 -40`的位置及Actionbar)
+16. 輸入 **-calc?`<數學問題>`** 計算數學問題，支援微積分極限求和三角函數等問題 *e.g. `-calc?x^2-6x+7=8964`*
+17. 輸入 **-playlist_edit `<動作>` `<播放清單名>` `[歌名]`** 修改(新增/移除)播放清單或其內容 *e.g. `-playlist_edit add test spaghetti`*
 
 ~~P.S. AI的部分是從易爆那拿來當範本的~~
