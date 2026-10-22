@@ -1,0 +1,13 @@
+import { readFile, mkdir, writeFile, rm } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+const root = fileURLToPath(new URL('../', import.meta.url));
+const dist = path.resolve(root, 'dist');
+if (path.dirname(dist) !== path.resolve(root)) throw new Error('Invalid build directory');
+await rm(dist, { recursive: true, force: true });
+await mkdir(path.join(dist, 'server'), { recursive: true });
+await mkdir(path.join(dist, '.openai'), { recursive: true });
+const source = await readFile(path.join(root, 'worker/index.js'));
+const manifest = await readFile(path.join(root, '.openai/hosting.json'));
+await writeFile(path.join(dist, 'server/index.js'), source);
+await writeFile(path.join(dist, '.openai/hosting.json'), manifest);

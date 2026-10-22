@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+const text = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
+const { default: worker } = await import('data:text/javascript;base64,' + Buffer.from(text).toString('base64'));
+const objects = new Map();
+const env = { BUCKET: { async get(key) { const value = objects.get(key); return value ? { json: async () => JSON.parse(value) } : null; }, async put(key, value) { objects.set(key, value); } } };
+const call = (route, value, token, cookie) => worker.fetch(new Request('https://console.test' + route, { method: value ? 'POST' : 'GET', headers: { ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(cookie ? { Cookie: cookie } : {}) }, ...(value ? { body: JSON.stringify(value) } : {}) }), env);
+const code = 'ABCDEF0123456789', publisher = 'a'.repeat(64);
+assert.equal((await call('/api/state')).status, 401);
+assert.equal((await call('/api/register', { code, owner: 'Test' }, publisher)).status, 201);
+assert.equal((await call('/api/publish', { code, state: {} }, 'b'.repeat(64))).status, 401);
+const state = { connected: true, players: ['Tester'], chat: [], logs: [], cpu: 20 };
+assert.equal((await call('/api/publish', { code, state }, publisher)).status, 200);
+const login = await call('/api/login', { code });
+const cookie = login.headers.get('Set-Cookie').split(';')[0];
+assert.equal((await (await call('/api/state', null, null, cookie)).json()).players[0], 'Tester');
+const otherCode = '0123456789ABCDEF';
+await call('/api/register', { code: otherCode, owner: 'Other' }, 'b'.repeat(64));
+assert.equal((await call('/api/state', null, null, cookie.replace(code, otherCode))).status, 401);
+for (const [key, value] of objects) { const record = JSON.parse(value); record.updated -= 16000; objects.set(key, JSON.stringify(record)); }
+const offline = await (await call('/api/state', null, null, cookie)).json();
+assert.equal(offline.connected, false); assert.deepEqual(offline.players, []);
+console.log('Registration, publisher authorization, code login, session isolation and offline detection passed');
