@@ -4,6 +4,9 @@
 
 ## 核心功能
 * **AI 智能對話**：整合 Gemini API，支援自定義 System Prompt 與函式呼叫 (Function Calling)。
+* **Undo / Redo 世界操作系統**：支援備份與復原地圖繪、迷宮及尋路標記，防止誤操作。
+* **最短路徑尋路系統**：使用 BFS 自動計算兩點間最佳路線並以羊毛標記地板。
+* **即時 Web 控制台**：自動生成查看碼，透過網頁即時監控玩家、指令延遲、伺服器效能與播放狀態。
 * **紅石音樂播放**：讀取 `music/` 資料夾下的 JSON 歌單，並在遊戲中精準播放。
 * **指令畫作繪製**：讀取 `commands/` 中的 .txt 檔案，自動生成遊戲內建築或畫作。
 * **即時天氣與定位**：內建 OpenWeather API，支援遊戲內查詢現實世界天氣。
@@ -13,6 +16,8 @@
 * **CPU效能監測**：監測CPU使用情況。
 * **計算機**：就是計算機(支援工程數學)。
 * **Discord Bot雙向跨平台聯動**：支援串接Discord機器人，讓Minecraft遊戲內聊天室與Discord指定頻道訊息即時互通，並支援從Discord遠端發送自訂功能指令
+* **玩家行為統計與排行榜**：自動追蹤玩家在線時間、死亡數、移動距離、AI 使用率及答題正確率，支援個人卡片與全服排行榜。
+* **遊戲內實體 Dashboard 資料牆**：打造 Minecraft 版 Grafana，將 CPU、網絡延遲即時繪製至遊戲內牆面。
 
 ## 安裝與使用 (使用者版)
 1.  前往 [Releases](https://github.com/liu-ouo-tw37/liu_ouo_tw-WSServer/releases) 下載最新的安裝程式的Setup (`.exe`)。
@@ -23,7 +28,7 @@
     * 將指令文字檔放入 `resources/commands/`
     * 數A複習題庫在 `math_db.json`
 4.  啟動程式，輸入你的 **Gemini API Key**、**OpenWeather API Key**和**Geocoding API Key**。
-5.  在 Minecraft 遊戲內輸入：`/connect localhost:5218` (或你設定的連接埠)連接WSServer。
+5.  在 Minecraft 遊戲內輸入：`/wsserver localhost:5218` (或你設定的連接埠)連接WSServer。
 6.  **連接後輸入`-help`取得更詳細的功能介紹。**
 
 ## 注意：
@@ -50,6 +55,12 @@
    ，往下點選查看頻道、傳送訊息和讀取訊息歷史紀錄，然後將下方的URL貼到瀏覽器並加入到你的伺服器，接著右鍵你想要他發送的頻道並點擊複製頻道ID(記得開啟開發者模式)，
    最後在我的程式頁面指定位置填入頻道ID和Token就好了
 
+## 即時 Web 控制台說明
+控制台網站：[Minecraft Server Console](https://liu37-minecraft-console.windyspool12.chatgpt.site)
+- **免設定即用**：WSServer 啟動時會自動連線並生成專屬「查看碼」，顯示於控制台與 PowerShell。
+- **監控項目**：即時查看線上玩家、聊天紀錄、CPU 使用率、指令延遲、世界指令/min、AI 請求次數、歌曲播放進度及 Event Log。
+- **安全性**：資料需輸入查看碼方可查看，每次啟動自動更換查看碼，且超過 24 小時未更新會自動失效。
+
 
 ## 功能介紹：
 1. 輸入 **-help** 在遊戲中看功能介紹
@@ -65,9 +76,14 @@
 11. 輸入 **-answer?`<答案>`** 在考試中進行作答(若不在考試中則無效) *e.g. `-answer?ACD`  /  `-answer?(11,3)`*
 12. 拿著時鐘，會顯示當下的時間(台灣時間UTF+8)，如果正在播放歌曲，同時會顯示目前的歌曲名稱及播放秒數、百分比
 13. 輸入 **-maze?`<長>*<寬>`** 生成 x ⨉ z 大小的迷宮 *e.g. `-maze?20*30`*
-14. 輸入 **-earthquake?** 開啟或關閉自動地震偵測(預設關閉)
-15. 輸入 **-cpu** 及 **-cpu_stop?** 開啟或關閉cpu監測牆(統一出現在`200 -60 -40`的位置及Actionbar)
-16. 輸入 **-calc?`<數學問題>`** 計算數學問題，支援微積分極限求和三角函數等問題 *e.g. `-calc?x^2-6x+7=8964`*
-17. 輸入 **-playlist_edit `<動作>` `<播放清單名>` `[歌名]`** 修改(新增/移除)播放清單或其內容 *e.g. `-playlist_edit add test spaghetti`*
+14. 輸入 **-path?`<Ax> <Ay> <Az> <Bx> <By> <Bz> [搜尋邊距]`** 平面最短路徑尋路，將路線替換為白色羊毛 *e.g. `-path?413 -61 89 461 -61 89`*
+15. 輸入 **-undo** / **-redo** / **-history** 復原、重做或查看世界操作紀錄（僅限管理員）
+16. 輸入 **-earthquake?** 開啟或關閉自動地震偵測(預設關閉)
+17. 輸入 **-cpu** 及 **-cpu_stop?** 開啟或關閉cpu監測牆(統一出現在`200 -60 -40`的位置及Actionbar)
+18. 輸入 **-calc?`<數學問題>`** 計算數學問題，支援微積分極限求和三角函數等問題 *e.g. `-calc?x^2-6x+7=8964`*
+19. 輸入 **-playlist_edit `<動作>` `<播放清單名>` `[歌名]`** 修改(新增/移除)播放清單或其內容 *e.g. `-playlist_edit add test spaghetti`*
+20. 輸入 **-stats `[玩家名稱]`** 查看個人或指定玩家的詳細行為統計（包含在線時間、死亡數、AI使用次數、答題正確率等） *e.g. `-stats` / `-stats?liu_ouo_tw`*
+21. 輸入 **-leaderboard?`<統計指標>`** 查看全服特定指標的排行榜（如 `playtime` 在線時間排行榜） *e.g. `-leaderboard?playtime`*
+22. 輸入 **-dashboard `<開/關>`** 開啟/生成遊戲內實體數據牆（Minecraft Grafana），即時監控 CPU、延遲 *e.g. `-dashboard on` / `-dashboard off`*
 
 ~~P.S. AI的部分是從易爆那拿來當範本的~~
